@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import StreetView from "./StreetView";
 import MiniMap from "./MiniMap";
 import locations from "./locations.json";
@@ -46,8 +46,41 @@ export default function App() {
   const [totalScore, setTotalScore] = useState(0);
   const [svLoading, setSvLoading] = useState(true);
   const [mapExpanded, setMapExpanded] = useState(false);
+  const [timeLeft, setTimeLeft] = useState(120);
 
   const locked = distance !== null;
+
+  // Timer countdown - only starts after loading finishes
+  useEffect(() => {
+    if (locked || timeLeft <= 0 || svLoading) return;
+
+    const interval = setInterval(() => {
+      setTimeLeft((prev) => {
+        if (prev <= 1) {
+          clearInterval(interval);
+          // Auto-submit when time runs out (with or without guess)
+          handleTimeExpiry();
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+
+    return () => clearInterval(interval);
+  }, [locked, timeLeft, svLoading]);
+
+  function handleTimeExpiry() {
+    if (guess) {
+      // User made a guess - calculate score
+      const d = getDistance(guess.lat, guess.lng, round.lat, round.lng);
+      setDistance(d);
+      setTotalScore((prev) => prev + calculateScore(d));
+    } else {
+      // No guess - set distance to a special value to show result without score
+      setDistance(-1);
+    }
+    setMapExpanded(true);
+  }
 
   function submitGuess() {
     if (!guess) return;
@@ -63,6 +96,7 @@ export default function App() {
     setGuess(null);
     setDistance(null);
     setMapExpanded(false);
+    setTimeLeft(10);
   }
 
   return (
@@ -76,6 +110,57 @@ export default function App() {
       }}
     >
       <StreetView imageId={round.id} onLoadingChange={setSvLoading} />
+
+      {/* TIMER */}
+      {!locked && (
+        <div
+          style={{
+            position: "absolute",
+            top: 60,
+            left: "50%",
+            transform: "translateX(-50%)",
+            zIndex: 1001,
+          }}
+        >
+          <div
+            style={{
+              position: "relative",
+              background: timeLeft <= 30
+                ? "rgba(239, 68, 68, 0.6)"
+                : "rgba(30, 41, 59, 0.5)",
+              backdropFilter: "blur(10px)",
+              padding: "12px 35px",
+              borderRadius: "50px",
+              fontWeight: "900",
+              fontSize: "32px",
+              color: "#fff",
+              boxShadow: timeLeft <= 30
+                ? "0 8px 32px rgba(239, 68, 68, 0.4), 0 2px 8px rgba(220, 38, 38, 0.3)"
+                : "0 8px 32px rgba(0,0,0,0.3), 0 2px 8px rgba(0,0,0,0.2)",
+              animation: timeLeft <= 10 ? "pulse 0.5s ease-in-out infinite" : "none",
+              transition: "all 0.3s ease",
+            }}
+          >
+            {/* Progress Border */}
+            <div
+              style={{
+                position: "absolute",
+                inset: -4,
+                borderRadius: "50px",
+                background: `conic-gradient(from 0deg, transparent 0%, transparent ${100 - (timeLeft / 120) * 100}%, ${timeLeft <= 30 ? "#ef4444" : "#667eea"} ${100 - (timeLeft / 120) * 100}%)`,
+                mask: "linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0)",
+                maskComposite: "exclude",
+                WebkitMask: "linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0)",
+                WebkitMaskComposite: "xor",
+                padding: "4px",
+                pointerEvents: "none",
+                transition: "all 0.3s ease",
+              }}
+            />
+            {Math.floor(timeLeft / 60)}:{String(timeLeft % 60).padStart(2, "0")}
+          </div>
+        </div>
+      )}
 
       {/* MAPBOX MINIMAP */}
       <MiniMap
@@ -135,8 +220,9 @@ export default function App() {
 
       {/* RESULT BAR */}
       {locked && (() => {
-        const score = calculateScore(distance);
+        const score = distance === -1 ? 0 : calculateScore(distance);
         const reaction = getCharacterReaction(score);
+        const noGuess = distance === -1;
         return (
         <div
           style={{
@@ -173,20 +259,21 @@ export default function App() {
                 animation: `${reaction.animation} 0.6s ease-in-out infinite`,
               }}
             >
-              {reaction.emoji}
+              {noGuess ? "⏰" : reaction.emoji}
             </div>
             <div
               style={{
                 fontSize: "16px",
                 fontWeight: "900",
-                color: reaction.color,
+                color: noGuess ? "#ef4444" : reaction.color,
                 letterSpacing: "2px",
-                textShadow: `0 0 20px ${reaction.color}80`,
+                textShadow: noGuess ? "0 0 20px #ef444480" : `0 0 20px ${reaction.color}80`,
               }}
             >
-              {reaction.text}
+              {noGuess ? "TIME'S UP!" : reaction.text}
             </div>
           </div>
+
           <div
             style={{
               display: "flex",
@@ -204,7 +291,7 @@ export default function App() {
                 letterSpacing: "1px",
               }}
             >
-              📍 DISTANCE
+              {noGuess ? "📍 CORRECT LOCATION" : "📍 DISTANCE"}
             </div>
             <div
               style={{
@@ -214,7 +301,7 @@ export default function App() {
                 textShadow: "0 4px 12px rgba(0,0,0,0.4)",
               }}
             >
-              {distance.toFixed(0)} km
+              {noGuess ? "Not Guessed" : `${distance.toFixed(0)} km`}
             </div>
           </div>
 

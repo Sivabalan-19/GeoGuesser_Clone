@@ -95,8 +95,8 @@ export default function MiniMap({
     const map = mapRef.current;
     if (!map) return;
 
-    // Clear markers and line when no guess or new round
-    if (!guess) {
+    // Clear markers and line when no guess or new round (not locked)
+    if (!guess && !locked) {
       if (guessMarker.current) {
         guessMarker.current.remove();
         guessMarker.current = null;
@@ -112,6 +112,9 @@ export default function MiniMap({
       return;
     }
 
+    // Only create guess marker if guess exists
+    if (!guess) return;
+
     if (guessMarker.current) guessMarker.current.remove();
 
     const el = document.createElement("img");
@@ -122,12 +125,12 @@ export default function MiniMap({
     guessMarker.current = new mapboxgl.Marker({ element: el })
       .setLngLat([guess.lng, guess.lat])
       .addTo(map);
-  }, [guess]);
+  }, [guess, locked]);
 
   /* ---------------- SHOW RESULT ---------------- */
   useEffect(() => {
     const map = mapRef.current;
-    if (!map || !locked || !guess) return;
+    if (!map || !locked) return;
 
     if (targetMarker.current) targetMarker.current.remove();
 
@@ -140,47 +143,57 @@ export default function MiniMap({
       .setLngLat([target.lng, target.lat])
       .addTo(map);
 
-    // Draw dashed line
-    if (map.getSource("line")) {
-      map.removeLayer("line-layer");
-      map.removeSource("line");
-    }
+    // Only draw line and fit bounds if there's a guess
+    if (guess) {
+      // Draw dashed line
+      if (map.getSource("line")) {
+        map.removeLayer("line-layer");
+        map.removeSource("line");
+      }
 
-    map.addSource("line", {
-      type: "geojson",
-      data: {
-        type: "Feature",
-        geometry: {
-          type: "LineString",
-          coordinates: [
-            [guess.lng, guess.lat],
-            [target.lng, target.lat],
-          ],
+      map.addSource("line", {
+        type: "geojson",
+        data: {
+          type: "Feature",
+          geometry: {
+            type: "LineString",
+            coordinates: [
+              [guess.lng, guess.lat],
+              [target.lng, target.lat],
+            ],
+          },
         },
-      },
-    });
+      });
 
-    map.addLayer({
-      id: "line-layer",
-      type: "line",
-      source: "line",
-      paint: {
-        "line-color": "#000",
-        "line-width": 3,
-        "line-dasharray": [2, 2],
-      },
-    });
+      map.addLayer({
+        id: "line-layer",
+        type: "line",
+        source: "line",
+        paint: {
+          "line-color": "#000",
+          "line-width": 3,
+          "line-dasharray": [2, 2],
+        },
+      });
 
-    // Fit bounds ONLY guess + target
-    const bounds = new mapboxgl.LngLatBounds()
-      .extend([guess.lng, guess.lat])
-      .extend([target.lng, target.lat]);
+      // Fit bounds to show both guess + target
+      const bounds = new mapboxgl.LngLatBounds()
+        .extend([guess.lng, guess.lat])
+        .extend([target.lng, target.lat]);
 
-    map.fitBounds(bounds, {
-      padding: expanded ? 80 : 50,
-      duration: 1200,
-      maxZoom: 15,
-    });
+      map.fitBounds(bounds, {
+        padding: expanded ? 80 : 50,
+        duration: 1200,
+        maxZoom: 15,
+      });
+    } else {
+      // No guess - just zoom to target location
+      map.flyTo({
+        center: [target.lng, target.lat],
+        zoom: 10,
+        duration: 1200,
+      });
+    }
   }, [locked, guess, target, expanded]);
 
   /* ---------------- RESIZE ON EXPAND ---------------- */
