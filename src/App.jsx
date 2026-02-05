@@ -1,20 +1,14 @@
 import { useState } from "react";
-import {
-  MapContainer,
-  TileLayer,
-  Marker,
-  Polyline,
-  useMapEvents,
-} from "react-leaflet";
-import "leaflet/dist/leaflet.css";
 import StreetView from "./StreetView";
+import MiniMap from "./MiniMap";
 import locations from "./locations.json";
 
-// 🌍 Distance formula
+/* ---------------- HELPERS ---------------- */
+
 function getDistance(lat1, lon1, lat2, lon2) {
   const R = 6371;
   const dLat = ((lat2 - lat1) * Math.PI) / 180;
-  const dLon = ((lon2 - lon1) * Math.PI) / 180;
+  const dLon = ((lat2 - lon1) * Math.PI) / 180;
 
   const a =
     Math.sin(dLat / 2) ** 2 +
@@ -25,162 +19,388 @@ function getDistance(lat1, lon1, lat2, lon2) {
   return R * (2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a)));
 }
 
-// 🎯 Score formula
 function calculateScore(distance) {
   const maxScore = 5000;
   return Math.max(0, Math.round(maxScore * Math.exp(-distance / 2000)));
 }
 
-// 📍 Map click handler
-function GuessMarker({ setGuess, locked }) {
-  const [pos, setPos] = useState(null);
-
-  useMapEvents({
-    click(e) {
-      if (locked) return;
-      setPos(e.latlng);
-      setGuess(e.latlng);
-    },
-  });
-
-  return pos ? <Marker position={pos} /> : null;
-}
-
-// 🎲 Random location
 function getRandomLocation() {
   return locations[Math.floor(Math.random() * locations.length)];
 }
+
+function getCharacterReaction(score) {
+  if (score >= 4500) return { emoji: "🤩", text: "AMAZING!", animation: "bounce", color: "#10b981" };
+  if (score >= 3500) return { emoji: "😃", text: "GREAT!", animation: "bounce", color: "#22c55e" };
+  if (score >= 2500) return { emoji: "😊", text: "GOOD!", animation: "nod", color: "#fbbf24" };
+  if (score >= 1500) return { emoji: "😐", text: "OK", animation: "nod", color: "#f59e0b" };
+  if (score >= 500) return { emoji: "😕", text: "MEH", animation: "shake", color: "#f97316" };
+  return { emoji: "😢", text: "OH NO!", animation: "shake", color: "#ef4444" };
+}
+
+/* ---------------- MAIN APP ---------------- */
 
 export default function App() {
   const [round, setRound] = useState(getRandomLocation());
   const [guess, setGuess] = useState(null);
   const [distance, setDistance] = useState(null);
-  const [roundNumber, setRoundNumber] = useState(1);
   const [totalScore, setTotalScore] = useState(0);
+  const [svLoading, setSvLoading] = useState(true);
+  const [mapExpanded, setMapExpanded] = useState(false);
 
   const locked = distance !== null;
 
-  function nextRound() {
-    if (roundNumber >= 5) return;
+  function submitGuess() {
+    if (!guess) return;
 
+    const d = getDistance(guess.lat, guess.lng, round.lat, round.lng);
+    setDistance(d);
+    setTotalScore((prev) => prev + calculateScore(d));
+    setMapExpanded(true);
+  }
+
+  function nextRound() {
     setRound(getRandomLocation());
     setGuess(null);
     setDistance(null);
-    setRoundNumber((r) => r + 1);
+    setMapExpanded(false);
   }
 
   return (
-    <div style={{ height: "100vh", width: "100vw", position: "relative" }}>
-      {/* 🌆 Street View */}
-      <StreetView imageId={round.id} />
+    <div
+      style={{
+        height: "100vh",
+        width: "100vw",
+        overflow: "hidden",
+        position: "relative",
+        background: "linear-gradient(135deg, #667eea 0%, #764ba2 100%)",
+      }}
+    >
+      <StreetView imageId={round.id} onLoadingChange={setSvLoading} />
 
-      {/* 🗺 Mini Map */}
-      <div
-        style={{
-          position: "absolute",
-          bottom: 20,
-          right: 20,
-          width: "320px",
-          height: "220px",
-          borderRadius: "10px",
-          overflow: "hidden",
-          border: "2px solid white",
-          boxShadow: "0 0 10px rgba(0,0,0,0.5)",
-        }}
-      >
-        <MapContainer center={[20, 0]} zoom={2} style={{ height: "100%" }}>
-          <TileLayer
-            attribution="&copy; OpenStreetMap"
-            url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-          />
-          <GuessMarker setGuess={setGuess} locked={locked} />
+      {/* MAPBOX MINIMAP */}
+      <MiniMap
+        guess={guess}
+        setGuess={setGuess}
+        target={{ lat: round.lat, lng: round.lng }}
+        locked={locked}
+        expanded={mapExpanded}
+        onClose={nextRound}
+      />
 
-          {locked && (
-            <>
-              <Marker position={[round.lat, round.lng]} />
-              <Polyline
-                positions={[
-                  [guess.lat, guess.lng],
-                  [round.lat, round.lng],
-                ]}
-              />
-            </>
-          )}
-        </MapContainer>
-      </div>
-
-      {/* 🎯 Submit Guess */}
-      {guess && !locked && (
+      {/* GUESS BUTTON */}
+      {!locked && (
         <button
-          onClick={() => {
-            const d = getDistance(guess.lat, guess.lng, round.lat, round.lng);
-            setDistance(d);
-            setTotalScore((prev) => prev + calculateScore(d));
-          }}
+          onClick={submitGuess}
+          disabled={!guess}
           style={{
             position: "absolute",
-            bottom: 260,
-            right: 20,
-            padding: "10px 14px",
-            fontSize: "14px",
-            borderRadius: "6px",
-            cursor: "pointer",
+            bottom: 24,
+            right: 24,
+            padding: "16px 36px",
+            fontSize: "17px",
+            borderRadius: "16px",
+            border: "none",
+            cursor: guess ? "pointer" : "not-allowed",
+            background: guess
+              ? "linear-gradient(135deg, #667eea 0%, #764ba2 100%)"
+              : "linear-gradient(135deg, #9ca3af 0%, #6b7280 100%)",
+            color: "white",
+            fontWeight: "800",
+            letterSpacing: "0.5px",
+            zIndex: 10000,
+            boxShadow: guess 
+              ? "0 12px 40px rgba(102, 126, 234, 0.4), 0 4px 12px rgba(118, 75, 162, 0.3)"
+              : "0 4px 12px rgba(0,0,0,0.15)",
+            transform: "scale(1)",
+            transition: "all 0.3s ease",
+          }}
+          onMouseEnter={(e) => {
+            if (guess) {
+              e.target.style.transform = "scale(1.05)";
+              e.target.style.boxShadow = "0 16px 48px rgba(102, 126, 234, 0.5), 0 6px 16px rgba(118, 75, 162, 0.4)";
+            }
+          }}
+          onMouseLeave={(e) => {
+            e.target.style.transform = "scale(1)";
+            e.target.style.boxShadow = guess 
+              ? "0 12px 40px rgba(102, 126, 234, 0.4), 0 4px 12px rgba(118, 75, 162, 0.3)"
+              : "0 4px 12px rgba(0,0,0,0.15)";
           }}
         >
-          Submit Guess
+          🎯 Guess
         </button>
       )}
 
-      {/* 🧾 Score / Round Display */}
-      <div
-        style={{
-          position: "absolute",
-          top: 20,
-          left: "50%",
-          transform: "translateX(-50%)",
-          background: "white",
-          padding: "10px 18px",
-          borderRadius: "10px",
-          fontWeight: "bold",
-        }}
-      >
-        Round {roundNumber}/5 | Score: {totalScore}
-      </div>
 
-      {/* 🏁 Result Panel */}
-      {distance && (
+
+      {/* RESULT BAR */}
+      {locked && (() => {
+        const score = calculateScore(distance);
+        const reaction = getCharacterReaction(score);
+        return (
+        <div
+          style={{
+            position: "fixed",
+            bottom: 0,
+            left: 0,
+            right: 0,
+            height: "160px",
+            background: "linear-gradient(to top, #0f172a 0%, #1e293b 100%)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            gap: "60px",
+            color: "white",
+            zIndex: 10001,
+            boxShadow: "0 -8px 32px rgba(0,0,0,0.3)",
+            animation: "slideUp 0.5s cubic-bezier(0.34, 1.56, 0.64, 1)",
+          }}
+        >
+          {/* ANIMATED CHARACTER */}
+          <div
+            style={{
+              display: "flex",
+              flexDirection: "column",
+              alignItems: "center",
+              gap: "12px",
+              animation: `${reaction.animation} 0.6s ease-in-out`,
+            }}
+          >
+            <div
+              style={{
+                fontSize: "80px",
+                filter: "drop-shadow(0 4px 12px rgba(0,0,0,0.3))",
+                animation: `${reaction.animation} 0.6s ease-in-out infinite`,
+              }}
+            >
+              {reaction.emoji}
+            </div>
+            <div
+              style={{
+                fontSize: "16px",
+                fontWeight: "900",
+                color: reaction.color,
+                letterSpacing: "2px",
+                textShadow: `0 0 20px ${reaction.color}80`,
+              }}
+            >
+              {reaction.text}
+            </div>
+          </div>
+          <div
+            style={{
+              display: "flex",
+              flexDirection: "column",
+              alignItems: "center",
+              gap: "8px",
+              animation: "fadeIn 0.5s ease 0.2s backwards",
+            }}
+          >
+            <div
+              style={{
+                fontSize: "14px",
+                fontWeight: "600",
+                color: "#94a3b8",
+                letterSpacing: "1px",
+              }}
+            >
+              📍 DISTANCE
+            </div>
+            <div
+              style={{
+                fontSize: "48px",
+                fontWeight: "900",
+                color: "#ffffff",
+                textShadow: "0 4px 12px rgba(0,0,0,0.4)",
+              }}
+            >
+              {distance.toFixed(0)} km
+            </div>
+          </div>
+
+          <div
+            style={{
+              width: "3px",
+              height: "80px",
+              background: "linear-gradient(to bottom, transparent, rgba(255,255,255,0.2), transparent)",
+              borderRadius: "2px",
+            }}
+          />
+
+          <div
+            style={{
+              display: "flex",
+              flexDirection: "column",
+              alignItems: "center",
+              gap: "8px",
+              animation: "fadeIn 0.5s ease 0.3s backwards",
+            }}
+          >
+            <div
+              style={{
+                fontSize: "14px",
+                fontWeight: "600",
+                color: "#94a3b8",
+                letterSpacing: "1px",
+              }}
+            >
+              ⭐ SCORE
+            </div>
+            <div
+              style={{
+                fontSize: "48px",
+                fontWeight: "900",
+                background: "linear-gradient(135deg, #fbbf24 0%, #f59e0b 100%)",
+                WebkitBackgroundClip: "text",
+                WebkitTextFillColor: "transparent",
+                backgroundClip: "text",
+                filter: "drop-shadow(0 2px 8px rgba(251, 191, 36, 0.5))",
+              }}
+            >
+              {score.toLocaleString()}
+            </div>
+          </div>
+
+          <div
+            style={{
+              width: "3px",
+              height: "80px",
+              background: "linear-gradient(to bottom, transparent, rgba(255,255,255,0.2), transparent)",
+              borderRadius: "2px",
+            }}
+          />
+
+          <button
+            onClick={nextRound}
+            style={{
+              padding: "20px 56px",
+              fontSize: "19px",
+              fontWeight: "900",
+              letterSpacing: "1px",
+              background: "linear-gradient(135deg, #22c55e 0%, #16a34a 100%)",
+              color: "white",
+              border: "none",
+              borderRadius: "18px",
+              cursor: "pointer",
+              boxShadow: "0 8px 32px rgba(34, 197, 94, 0.5)",
+              transition: "all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1)",
+              transform: "scale(1)",
+              animation: "fadeIn 0.5s ease 0.4s backwards",
+            }}
+            onMouseEnter={(e) => {
+              e.target.style.transform = "scale(1.08) translateY(-2px)";
+              e.target.style.boxShadow = "0 16px 40px rgba(34, 197, 94, 0.6)";
+            }}
+            onMouseLeave={(e) => {
+              e.target.style.transform = "scale(1)";
+              e.target.style.boxShadow = "0 8px 32px rgba(34, 197, 94, 0.5)";
+            }}
+          >
+            🚀 Next Location
+          </button>
+        </div>
+        );
+      })()}
+
+      {/* TOTAL SCORE */}
+      {!locked && (
         <div
           style={{
             position: "absolute",
-            top: 20,
-            left: 20,
-            background: "white",
-            padding: "12px",
-            borderRadius: "8px",
-            maxWidth: "240px",
+            bottom: 24,
+            left: 24,
+            background: "linear-gradient(135deg, rgba(255,255,255,0.95), rgba(255,255,255,0.85))",
+            backdropFilter: "blur(10px)",
+            padding: "16px 28px",
+            borderRadius: "20px",
+            fontWeight: "800",
+            fontSize: "16px",
+            color: "#1e293b",
+            boxShadow: "0 8px 32px rgba(0,0,0,0.15), 0 2px 8px rgba(0,0,0,0.1)",
+            border: "2px solid rgba(255,255,255,0.6)",
+            transition: "all 0.3s ease",
+            animation: "pulse 2s ease-in-out infinite",
           }}
         >
-          <h3>Round Result</h3>
-          <p>
-            You were <b>{distance.toFixed(2)} km</b> away
-          </p>
-          <p>
-            Round Score: <b>{calculateScore(distance)}</b>
-          </p>
+          <span style={{ fontSize: "20px", marginRight: "10px" }}>🏆</span>
+          <span style={{ fontWeight: "900", fontSize: "18px" }}>{totalScore.toLocaleString()}</span>
+          <span style={{ color: "#94a3b8", marginLeft: "6px", fontSize: "14px", fontWeight: "600" }}>pts</span>
+        </div>
+      )}
 
-          {roundNumber < 5 ? (
-            <button onClick={nextRound}>Next Round</button>
-          ) : (
-            <>
-              <h2>🏆 Game Over!</h2>
-              <p>
-                Total Score: <b>{totalScore}</b>
-              </p>
-              <button onClick={() => window.location.reload()}>
-                Play Again
-              </button>
-            </>
-          )}
+      {/* CSS ANIMATIONS */}
+      <style>{`
+        @keyframes slideUp {
+          from { transform: translateY(100%); opacity: 0; }
+          to { transform: translateY(0); opacity: 1; }
+        }
+        @keyframes fadeIn {
+          from { opacity: 0; transform: translateY(10px); }
+          to { opacity: 1; transform: translateY(0); }
+        }
+        @keyframes bounce {
+          0%, 100% { transform: translateY(0); }
+          50% { transform: translateY(-20px); }
+        }
+        @keyframes nod {
+          0%, 100% { transform: rotate(0deg); }
+          25% { transform: rotate(10deg); }
+          75% { transform: rotate(-10deg); }
+        }
+        @keyframes shake {
+          0%, 100% { transform: translateX(0); }
+          25% { transform: translateX(-10px); }
+          75% { transform: translateX(10px); }
+        }
+        @keyframes pulse {
+          0%, 100% { transform: scale(1); }
+          50% { transform: scale(1.05); }
+        }
+        @keyframes spin {
+          from { transform: rotate(0deg); }
+          to { transform: rotate(360deg); }
+        }
+      `}</style>
+
+      {/* STREET VIEW LOADER */}
+      {svLoading && (
+        <div
+          style={{
+            position: "fixed",
+            inset: 0,
+            display: "flex",
+            flexDirection: "column",
+            alignItems: "center",
+            justifyContent: "center",
+            background: "linear-gradient(135deg, rgba(102, 126, 234, 0.95) 0%, rgba(118, 75, 162, 0.95) 100%)",
+            backdropFilter: "blur(10px)",
+            zIndex: 9000,
+            pointerEvents: "none",
+            animation: "fadeIn 0.3s ease",
+          }}
+        >
+          <div
+            style={{
+              width: "80px",
+              height: "80px",
+              border: "6px solid rgba(255,255,255,0.3)",
+              borderTop: "6px solid white",
+              borderRadius: "50%",
+              animation: "spin 1s linear infinite",
+              marginBottom: "24px",
+            }}
+          />
+          <div
+            style={{
+              color: "white",
+              fontSize: "22px",
+              fontWeight: "800",
+              letterSpacing: "1.5px",
+              textShadow: "0 2px 8px rgba(0,0,0,0.3)",
+            }}
+          >
+            🌍 Loading Street View...
+          </div>
         </div>
       )}
     </div>

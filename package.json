@@ -12,6 +12,7 @@
   "dependencies": {
     "dotenv": "^17.2.3",
     "leaflet": "^1.9.4",
+    "mapbox-gl": "^3.18.1",
     "mapillary-js": "^4.1.2",
     "node-fetch": "^3.3.2",
     "react": "^19.2.0",
