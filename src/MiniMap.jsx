@@ -26,7 +26,8 @@ export default function MiniMap({
   useEffect(() => {
     if (mapRef.current || !mapContainer.current) return;
     if (!hasToken) {
-      setMapError("Missing VITE_MAPBOX_TOKEN");
+      // Defer to avoid synchronous setState in effect
+      setTimeout(() => setMapError("Missing VITE_MAPBOX_TOKEN"), 0);
       return;
     }
 
@@ -65,7 +66,8 @@ export default function MiniMap({
           setMapLoaded(true);
         }, 3000);
       } catch (err) {
-        setMapError("Failed to initialize Mapbox map");
+        console.error("Mapbox init failed", err);
+        setTimeout(() => setMapError("Failed to initialize Mapbox map"), 0);
       }
     }, 100);
 

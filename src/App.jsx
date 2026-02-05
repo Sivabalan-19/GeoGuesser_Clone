@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import StreetView from "./StreetView";
 import MiniMap from "./MiniMap";
 import locations from "./locations.json";
@@ -8,7 +8,7 @@ import locations from "./locations.json";
 function getDistance(lat1, lon1, lat2, lon2) {
   const R = 6371;
   const dLat = ((lat2 - lat1) * Math.PI) / 180;
-  const dLon = ((lat2 - lon1) * Math.PI) / 180;
+  const dLon = ((lon2 - lon1) * Math.PI) / 180;
 
   const a =
     Math.sin(dLat / 2) ** 2 +
@@ -50,6 +50,19 @@ export default function App() {
 
   const locked = distance !== null;
 
+  const handleTimeExpiry = useCallback(() => {
+    if (guess) {
+      // User made a guess - calculate score
+      const d = getDistance(guess.lat, guess.lng, round.lat, round.lng);
+      setDistance(d);
+      setTotalScore((prev) => prev + calculateScore(d));
+    } else {
+      // No guess - set distance to a special value to show result without score
+      setDistance(-1);
+    }
+    setMapExpanded(true);
+  }, [guess, round]);
+
   // Timer countdown - only starts after loading finishes
   useEffect(() => {
     if (locked || timeLeft <= 0 || svLoading) return;
@@ -67,20 +80,7 @@ export default function App() {
     }, 1000);
 
     return () => clearInterval(interval);
-  }, [locked, timeLeft, svLoading]);
-
-  function handleTimeExpiry() {
-    if (guess) {
-      // User made a guess - calculate score
-      const d = getDistance(guess.lat, guess.lng, round.lat, round.lng);
-      setDistance(d);
-      setTotalScore((prev) => prev + calculateScore(d));
-    } else {
-      // No guess - set distance to a special value to show result without score
-      setDistance(-1);
-    }
-    setMapExpanded(true);
-  }
+  }, [locked, timeLeft, svLoading, handleTimeExpiry]);
 
   function submitGuess() {
     if (!guess) return;

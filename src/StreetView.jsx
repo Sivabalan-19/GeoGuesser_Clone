@@ -23,9 +23,12 @@ export default function StreetView({ imageId, onLoadingChange }) {
       viewerRef.current = null;
     }
 
-    setLoading(true);
-    onLoadingChange?.(true);
-    setError(null);
+    // Defer state updates to avoid synchronous setState within effect
+    queueMicrotask(() => {
+      setLoading(true);
+      onLoadingChange?.(true);
+      setError(null);
+    });
 
     viewerRef.current = new Viewer({
       accessToken: TOKEN,
