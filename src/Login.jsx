@@ -1,12 +1,22 @@
 import { useState } from "react";
+import { post } from "./utils/axios";
 
 export default function Login() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
-    console.log("Login submitted:", { email, password });
+
+    try {
+      const res = await post("users/login", { email, password });
+      if (res?.token) {
+        localStorage.setItem("token", res.token);
+      }
+      console.log(res);
+    } catch (error) {
+      console.error(error);
+    }
   };
 
   return (
